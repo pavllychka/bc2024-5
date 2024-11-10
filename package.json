@@ -2,9 +2,11 @@
   "name": "bc2024-5",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js",
+    "dev": "nodemon app.js --host localhost --port 3002 --cache ./cache"
   },
   "keywords": [],
   "author": "",
