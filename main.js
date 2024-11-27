@@ -17,29 +17,15 @@ const options = program.opts();
 
 const cacheDirectory = path.resolve(options.cache);
 if (!fs.existsSync(cacheDirectory)) {
-    console.error(`Directory cache path is invalid`);
-    process.exit(1);
+    console.log(`Cache directory does not exist. Creating directory: ${cacheDirectory}`);
+    fs.mkdirSync(cacheDirectory, { recursive: true });
 }
 
-const notesFilePath = path.join(cacheDirectory, 'notes.json');
-
-function saveNotesToFile() {
-    fs.writeFileSync(notesFilePath, JSON.stringify(notes, null, 2));
-}
-
-function loadNotesFromFile() {
-    if (fs.existsSync(notesFilePath)) {
-        const data = fs.readFileSync(notesFilePath);
-        return JSON.parse(data);
-    }
-    return [];
-}
-
-let notes = loadNotesFromFile();
 
 const app = express();
 app.use(express.json());
 const upload = multer();
+app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => {
     res.send("сервер працєю вав дуже касно юху");
@@ -54,80 +40,87 @@ server.on('error', (err) => {
 });
 
 app.get(`/notes/:name`, (req, res) => {
-    const name = req.params.name;
+    const noteFile = path.join(cacheDirectory, `${req.params.name}.txt`);
 
-    const note = notes.find(note => note.name === name);
-
-    if (!note) {
-        console.log(`Note not found: ${name}`);
+    if (!fs.existsSync(noteFile)) {
+        console.log(`Note not found: ${req.params.name}`);
         return res.status(404).send("Note not found!");
     }
-    
-    res.send(note.text);
+
+    const noteContent = fs.readFileSync(noteFile, 'utf8');
+    res.send(noteContent);
 });
 
-app.post('/notes/write', upload.fields([{ name: 'note_name' }, { name: 'note' }]), (req, res) => {
+app.post('/notes/write', upload.none(),(req, res) => {
+    console.log("Request Body:", req.body);
     const name = req.body.note_name;
     const text = req.body.note;
 
-    if (!name) {
-        return res.status(400).send("Name parameter is required.");
-    }
 
-    console.log(`Received request to create note with name: ${name}`);
+    
+    const notePath = path.join(cacheDirectory, `${name}.txt`);
 
-    const existingNote = notes.find(note => note.name === name);
-
-    if (existingNote) {
+    if (fs.existsSync(notePath)) {
         return res.status(400).send("Note already exists!");
     }
 
-    const newNote = {
-        name: name,
-        text: text || "No text provided"
-    };
+    fs.writeFileSync(notePath, text || "No text provided");
+    console.log(`Note ${name} created successfully!`);
 
-    notes.push(newNote);
-    saveNotesToFile(); 
-    console.log(notes);
-
-    return res.status(201).send(newNote);
+    res.status(201).send(`Note ${name} created successfully!`);
 });
+
+   
+
 
 app.get('/notes', (req, res) => {
-    res.status(200).send(notes);
-});
+    const files = fs.readdirSync(cacheDirectory).filter(file => file.endsWith('.txt'));
+    
+    const notes = files.map(file => {
+        const filePath = path.join(cacheDirectory, file);
+        const text = fs.readFileSync(filePath, 'utf8'); 
+        return {
+            name: path.basename(file, '.txt'), 
+            text: text 
+        };
+    });
 
+    res.status(200).json(notes); 
+});
 app.put("/notes/:name", (req, res) => {
     const newText = req.body.text;
     const name = req.params.name; 
 
-    const note = notes.find(note => note.name === name);
-    if (!note) {
+    const noteFile = path.join(cacheDirectory, `${name}.txt`);
+    if (!fs.existsSync(noteFile)) {
         return res.status(404).send(`Note ${name} not found!`);
     }
 
-    note.text = newText;
-    saveNotesToFile(); 
+    fs.writeFileSync(noteFile, newText || "No text provided");
+    console.log(`Note ${name} updated successfully!`);
     res.status(201).send(`Note ${name} updated successfully!`);
 });
 
 app.delete('/notes/:name', (req, res) => {
     const name = req.params.name;
 
-    const noteIndex = notes.findIndex(note => note.name === name);
+    const noteFile = path.join(cacheDirectory, `${name}.txt`);
 
-    if (noteIndex === -1) {
+    if (!fs.existsSync(noteFile)) {
         return res.status(404).send("Note not found!");
     }
 
-    const deletedNote = notes.splice(noteIndex, 1)[0];
-    saveNotesToFile();
-    res.send(`Note ${deletedNote.name} deleted successfully!`);
+    fs.unlinkSync(noteFile);
+    console.log(`Note ${name} deleted successfully!`);
+    res.send(`Note ${name} deleted successfully!`);
 });
 
 
 app.get("/UploadForm.html", (req, res) => {
-    res.sendFile(path.join(__dirname, "UploadForm.html"));
-
-})
+    const formPath = path.join(__dirname, "UploadForm.html");
+    if (fs.existsSync(formPath)) {
+        res.sendFile(formPath);
+    } else {
+        res.status(404).send("Form not found!");
+    }
+});
